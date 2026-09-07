@@ -3,7 +3,6 @@ import cors from 'cors';
 import dotenv from 'dotenv';
 import path from 'path';
 import fs from 'fs/promises';
-import { existsSync } from 'fs';
 import os from 'os';
 import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
@@ -129,7 +128,6 @@ async function executeLocally(code, stdin = '') {
 
     // 2. Execution Phase
     const runResult = await new Promise((resolve) => {
-      // Memory cap: 128MB, serial GC for low overhead
       const java = spawn('java', ['-Xmx128m', '-XX:+UseSerialGC', className], {
         cwd: tempDir,
         timeout: 6000
@@ -191,7 +189,6 @@ async function executeLocally(code, stdin = '') {
       engine: 'local-jdk'
     };
   } finally {
-    // Cleanup temporary workspace files
     try {
       await fs.rm(tempDir, { recursive: true, force: true });
     } catch {
@@ -209,7 +206,6 @@ app.post('/api/compile', async (req, res) => {
   }
 
   try {
-    // Attempt local execution first
     try {
       const localResult = await executeLocally(code, stdin || '');
       return res.json(localResult);
@@ -230,6 +226,63 @@ app.post('/api/compile', async (req, res) => {
   }
 });
 
+// Helper: Call Google Gemini REST API with fallback models
+async function callGeminiApi(apiKey, model, systemInstruction, contents) {
+  const candidateModels = [
+    model,
+    'gemini-2.5-flash',
+    'gemini-2.0-flash',
+    'gemini-1.5-flash',
+    'gemini-1.5-pro'
+  ];
+
+  // Remove duplicates
+  const modelsToTry = [...new Set(candidateModels.filter(Boolean))];
+  let lastError = null;
+
+  for (const targetModel of modelsToTry) {
+    try {
+      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
+      const response = await fetch(endpoint, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          system_instruction: {
+            parts: [{ text: systemInstruction }]
+          },
+          contents,
+          generationConfig: {
+            temperature: 0.7,
+            maxOutputTokens: 2000
+          }
+        })
+      });
+
+      if (response.ok) {
+        const data = await response.json();
+        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+        if (replyText) {
+          return { reply: replyText, model: targetModel };
+        }
+      } else {
+        const errorText = await response.text();
+        lastError = new Error(`Gemini API [${targetModel}] (${response.status}): ${errorText}`);
+        // If 404 model not found, continue to next model; if 400 or 403, might be auth error
+        if (response.status === 400 || response.status === 403) {
+          throw lastError;
+        }
+      }
+    } catch (err) {
+      lastError = err;
+      if (err.message.includes('403') || err.message.includes('API_KEY_INVALID') || err.message.includes('400')) {
+        throw err;
+      }
+    }
+  }
+
+  throw lastError || new Error('All candidate Gemini models failed.');
+}
+
 // AI Tutor Chat Route
 app.post('/api/chat', async (req, res) => {
   const { messages, apiKey: userApiKey, model: userModel, codeContext } = req.body;
@@ -238,7 +291,7 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: 'Messages array is required' });
   }
 
-  const effectiveApiKey = userApiKey || process.env.GEMINI_API_KEY;
+  const effectiveApiKey = (userApiKey && userApiKey.trim()) || process.env.GEMINI_API_KEY || '';
   const targetModel = userModel || 'gemini-2.5-flash';
 
   const systemInstruction = `You are DukeAI, a world-class, welcoming, and encouraging Java programming tutor designed specifically for beginners.
@@ -250,252 +303,475 @@ Your pedagogical mission:
    - What the error literally means in plain English.
    - Which line triggered it.
    - The exact fix, accompanied by an explanation of why the fix works.
-5. If the user shares their current code, reference their specific variable names and line numbers.
+5. If the student provides Java code from their editor, reference their exact variable names, method names, and line numbers.
 6. Provide short check-for-understanding questions or mini-challenges to reinforce learning.
 7. Use Markdown formatting with bolding, bullet points, and syntax-highlighted java code blocks (\`\`\`java).`;
 
-  // If API key is available, call Gemini API
-  if (effectiveApiKey) {
+  // If API key is provided and looks plausible
+  if (effectiveApiKey && effectiveApiKey.startsWith('AIzaSy')) {
     try {
-      const contents = [];
+      // Clean and normalize messages for Gemini API
+      const normalizedContents = [];
+      let foundFirstUser = false;
 
-      // Format messages for Gemini API
       for (const msg of messages) {
-        contents.push({
-          role: msg.role === 'assistant' ? 'model' : 'user',
-          parts: [{ text: msg.content }]
-        });
-      }
+        const role = msg.role === 'assistant' ? 'model' : 'user';
+        if (!foundFirstUser) {
+          if (role === 'user') {
+            foundFirstUser = true;
+          } else {
+            continue; // Skip initial assistant greeting
+          }
+        }
 
-      // Inject code context if provided
-      if (codeContext && contents.length > 0) {
-        const lastMsg = contents[contents.length - 1];
-        if (lastMsg.role === 'user') {
-          lastMsg.parts[0].text = `[Current Java Code in Student Editor]:\n\`\`\`java\n${codeContext}\n\`\`\`\n\nStudent Question / Message: ${lastMsg.parts[0].text}`;
+        if (normalizedContents.length > 0 && normalizedContents[normalizedContents.length - 1].role === role) {
+          normalizedContents[normalizedContents.length - 1].parts[0].text += `\n\n${msg.content}`;
+        } else {
+          normalizedContents.push({
+            role,
+            parts: [{ text: msg.content }]
+          });
         }
       }
 
-      const geminiEndpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${effectiveApiKey}`;
-
-      const response = await fetch(geminiEndpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemInstruction }]
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 1500
-          }
-        })
-      });
-
-      if (!response.ok) {
-        const errorText = await response.text();
-        console.error('Gemini API Error Response:', errorText);
-        return res.status(response.status).json({
-          error: `AI Service Error (${response.status}): ${errorText}`
+      if (normalizedContents.length === 0) {
+        const lastUser = messages.filter(m => m.role === 'user').pop();
+        normalizedContents.push({
+          role: 'user',
+          parts: [{ text: lastUser?.content || 'Hello DukeAI! Help me learn Java.' }]
         });
       }
 
-      const data = await response.json();
-      const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text || 'I could not generate a response. Please try again.';
+      // Inject code context into the latest user message
+      if (codeContext && codeContext.trim()) {
+        const lastTurn = normalizedContents[normalizedContents.length - 1];
+        if (lastTurn && lastTurn.role === 'user') {
+          lastTurn.parts[0].text = `[Student Editor Java Code]:\n\`\`\`java\n${codeContext}\n\`\`\`\n\n[Student Question/Input]:\n${lastTurn.parts[0].text}`;
+        }
+      }
 
-      return res.json({ reply: replyText, model: targetModel, provider: 'gemini' });
+      const result = await callGeminiApi(effectiveApiKey, targetModel, systemInstruction, normalizedContents);
+      return res.json({
+        reply: result.reply,
+        model: result.model,
+        provider: 'gemini',
+        isOfflineFallback: false
+      });
     } catch (apiErr) {
-      console.error('AI Request Error:', apiErr);
-      return res.status(500).json({ error: `AI request failed: ${apiErr.message}` });
+      console.warn('Gemini API call failed, falling back to pedagogical engine:', apiErr.message);
+      // Fallback seamlessly to the rich pedagogical engine
+      const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content || '';
+      const fallbackReply = generatePedagogicalFallback(lastUserMsg, codeContext);
+      return res.json({
+        reply: `${fallbackReply}\n\n> ⚠️ *Note: Your Gemini API key returned an error (\`${apiErr.message.split('\n')[0]}\`). DukeAI generated this response using the built-in pedagogical engine. You can update your key in ⚙ Settings.*`,
+        model: 'duke-pedagogical-v2',
+        provider: 'offline-fallback',
+        isOfflineFallback: true
+      });
     }
   }
 
-  // Fallback: Smart Built-in Tutor Engine (Works seamlessly offline or without key)
-  const lastUserMsg = messages[messages.length - 1]?.content || '';
+  // Fallback: Smart Built-in Pedagogical Tutor Engine (Offline / Zero-Config)
+  const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content || '';
   const fallbackReply = generatePedagogicalFallback(lastUserMsg, codeContext);
 
   return res.json({
     reply: fallbackReply,
-    model: 'built-in-pedagogical-engine',
+    model: 'duke-pedagogical-v2',
     provider: 'offline',
     isOfflineFallback: true
   });
 });
 
-// Built-in Pedagogical Tutor Engine for instant zero-config learning
+// Comprehensive Built-in Pedagogical Tutor Engine
 function generatePedagogicalFallback(prompt, codeContext = '') {
-  const p = prompt.toLowerCase();
+  const p = prompt.toLowerCase().trim();
 
-  if (p.includes('explain') && (p.includes('error') || p.includes('exception') || p.includes('bug'))) {
-    return `### 🔍 Error Diagnosis & Fix
+  // 1. Error Diagnosis
+  if (p.includes('error') || p.includes('exception') || p.includes('diagnose') || p.includes('fail') || p.includes('bug') || p.includes('fix')) {
+    let specificCause = '';
+    if (prompt.includes('; expected') || p.includes('semicolon')) {
+      specificCause = `\n- **Cause**: A statement is missing a closing semicolon (\`;\`). Java requires every statement to conclude with a semicolon.`;
+    } else if (prompt.includes('cannot find symbol') || p.includes('symbol')) {
+      specificCause = `\n- **Cause**: Java cannot find a variable or method you referenced. Check for typos in variable names, or ensure you declared the variable with its type (e.g. \`int myVar = 10;\`).`;
+    } else if (prompt.includes('class') && prompt.includes('public')) {
+      specificCause = `\n- **Cause**: The \`public class\` name must match the filename. Ensure your class is named \`public class Main\`.`;
+    }
 
-When encountering Java errors, remember: **compiler errors are your best friend!** They stop bugs before your program ever runs.
+    return `### 🔍 DukeAI Error Diagnosis & Fix
+${specificCause}
 
-Common beginner errors to check:
-1. **Missing Semicolon (\`;\`)**: Every standalone statement in Java must end with \`;\`.
-2. **Cannot find symbol**: You might have a typo in a variable name or forgot to declare its type (like \`int x = 5;\`).
-3. **Class name mismatch**: In standard Java, your file name must match the \`public class\` name (e.g. \`public class Main\` goes in \`Main.java\`).
-4. **Mismatched curly braces (\`{}\`)**: Make sure every opening brace \`{\` has a matching closing brace \`}\`.
-
-> 💡 **Tip**: Click the **"Run Code"** button above. If an error appears in the terminal below, click **"Ask Duke AI to Diagnose"** to get an instant breakdown!
-
-Would you like me to walk through the exact line causing the problem?`;
-  }
-
-  if (p.includes('variable') || p.includes('data type') || p.includes('int') || p.includes('string')) {
-    return `### 📦 Understanding Java Variables & Data Types
-
-Think of a **variable** as a labeled storage box in your computer's memory. When you create one, you must tell Java two things:
-1. **The Type** (what kind of data fits inside the box)
-2. **The Name** (the label on the box)
+Here is a step-by-step checklist to resolve this:
+1. **Locate the line**: In the console below, look for the line number (e.g., \`Main.java:4\`). You can click the line link to jump directly to it in the editor.
+2. **Braces & Semicolons**: Verify that every opening brace \`{\` has a matching closing brace \`}\` and every line ends with \`;\`.
+3. **Data Types**: Check that variables are assigned compatible types (e.g. don't assign a String to an \`int\`).
 
 \`\`\`java
 public class Main {
     public static void main(String[] args) {
-        // 1. Whole numbers (int)
-        int studentAge = 19;
-
-        // 2. Decimal numbers (double)
-        double gpa = 3.85;
-
-        // 3. True / False (boolean)
-        boolean lovesCoding = true;
-
-        // 4. Single character (char - single quotes!)
-        char grade = 'A';
-
-        // 5. Text / Words (String - double quotes!)
-        String name = "Alex";
-
-        System.out.println("Student: " + name);
-        System.out.println("Age: " + studentAge + " | GPA: " + gpa);
-        System.out.println("Grade: " + grade + " | Loves coding: " + lovesCoding);
+        // Correct syntax example:
+        int score = 100; // note the semicolon!
+        System.out.println("Score: " + score);
     }
 }
 \`\`\`
 
-#### Quick Check 🎯
-What happens if you try to assign \`int age = "nineteen";\`? 
-*Java's compiler will stop you!* Because \`int\` only accepts numeric integers, not String text. This is called **static typing**, and it protects your code from unexpected bugs.
-
-Try loading the code into the editor above and pressing **Run Code**!`;
+Press **Run Code (Ctrl+Enter)** after making the fix! Would you like me to rewrite the snippet for you?`;
   }
 
-  if (p.includes('loop') || p.includes('for') || p.includes('while')) {
-    return `### 🔁 Java Loops: Automating Repetition
+  // 2. Explain Current Code in Editor
+  if (p.includes('explain') && (p.includes('code') || p.includes('current') || p.includes('editor') || p.includes('my'))) {
+    if (codeContext && codeContext.trim().length > 10) {
+      // Analyze the code dynamically
+      const hasScanner = codeContext.includes('Scanner');
+      const hasLoops = codeContext.includes('for ') || codeContext.includes('while ') || codeContext.includes('for(');
+      const hasIf = codeContext.includes('if ') || codeContext.includes('if(');
+      const hasClass = codeContext.includes('class ') && !codeContext.includes('class Main');
+      const hasArray = codeContext.includes('[]') || codeContext.includes('Array');
 
-Instead of writing \`System.out.println("Hello");\` ten times, we use **loops**!
+      let breakdown = [];
+      breakdown.push(`- **Class & Entry Point**: \`public class Main\` houses the program, and \`public static void main(String[] args)\` is where Java starts executing.`);
+      
+      if (hasScanner) {
+        breakdown.push(`- **User Input**: Uses \`Scanner\` to read input from the keyboard (stdin).`);
+      }
+      if (hasIf) {
+        breakdown.push(`- **Decision Making**: Uses \`if / else\` conditionals to test boolean conditions and branch execution.`);
+      }
+      if (hasLoops) {
+        breakdown.push(`- **Repetition**: Contains loops to automate repetitive operations without writing duplicate lines.`);
+      }
+      if (hasArray) {
+        breakdown.push(`- **Data Storage**: Uses an **Array** to hold multiple values under a single name.`);
+      }
+      if (hasClass) {
+        breakdown.push(`- **Custom Objects (OOP)**: Defines a custom class to model real-world attributes and methods.`);
+      }
 
-#### 1. The Classic \`for\` Loop
-Best when you know **how many times** you want to repeat something:
+      return `### 💡 Line-by-Line Code Breakdown
+
+Here is what your current editor code is doing:
+
+${breakdown.join('\n')}
+
+#### How It Executes:
+When you click **Run Code**, Java compiles your code into bytecode, then the JVM executes instructions inside \`main\` sequentially from top to bottom.
+
+Try tweaking a value or adding a new \`System.out.println()\` to see how the console output changes!`;
+    }
+  }
+
+  // 3. Variables & Data Types
+  if (p.includes('variable') || p.includes('type') || p.includes('int') || p.includes('double') || p.includes('boolean') || p.includes('char') || p.includes('string')) {
+    return `### 📦 Java Variables & Data Types
+
+In Java, every variable has a **Type** (what fits inside) and a **Name** (the label on the box).
+
+#### The 5 Essential Types for Beginners:
+1. \`int\`: Whole numbers without decimals (\`int count = 5;\`)
+2. \`double\`: Fractional / decimal numbers (\`double price = 19.99;\`)
+3. \`boolean\`: Logical truth value: either \`true\` or \`false\`
+4. \`char\`: A single character inside single quotes (\`char letter = 'A';\`)
+5. \`String\`: Text inside double quotes (\`String name = "Duke";\`)
+
 \`\`\`java
 public class Main {
     public static void main(String[] args) {
-        // (start; condition; update)
+        String language = "Java";
+        int releaseYear = 1995;
+        double speedRating = 9.8;
+        boolean isFun = true;
+
+        System.out.println(language + " was created in " + releaseYear);
+        System.out.println("Speed Rating: " + speedRating + "/10");
+        System.out.println("Is it fun to learn? " + isFun);
+    }
+}
+\`\`\`
+
+> 🧠 **Remember**: Java is **statically typed**. Once you declare \`int x = 10;\`, you cannot assign text to it like \`x = "hello";\`. This prevents bugs before your code even runs!`;
+  }
+
+  // 4. Loops (For, While, Do-While)
+  if (p.includes('loop') || p.includes('for') || p.includes('while') || p.includes('repeat') || p.includes('iteration')) {
+    return `### 🔁 Java Loops: For vs. While
+
+Loops automate repetition so you don't have to copy-paste code.
+
+#### 1. The \`for\` Loop (When you know the count)
+\`\`\`java
+public class Main {
+    public static void main(String[] args) {
+        // (initialization; condition; increment)
         for (int i = 1; i <= 5; i++) {
-            System.out.println("Countdown: " + i);
+            System.out.println("Loop iteration #" + i);
         }
-        System.out.println("Blast off! 🚀");
     }
 }
 \`\`\`
 
-#### 2. The \`while\` Loop
-Best when you want to repeat **until a condition changes**:
+#### 2. The \`while\` Loop (When repeating until a condition changes)
 \`\`\`java
 public class Main {
     public static void main(String[] args) {
-        int energy = 3;
-        while (energy > 0) {
-            System.out.println("Coding in progress... Energy: " + energy);
-            energy--; // Don't forget to decrement, or it loops forever!
+        int battery = 3;
+        while (battery > 0) {
+            System.out.println("Robot working... Battery: " + battery);
+            battery--; // Always update the variable to avoid infinite loops!
         }
-        System.out.println("Time for coffee! ☕");
+        System.out.println("Recharge needed! ⚡");
     }
 }
 \`\`\`
 
-**Mini Challenge**: Try altering the loop in the editor to count backwards from 10 down to 1!`;
+**Quick Challenge**: Try creating a loop that prints even numbers from 2 to 10!`;
   }
 
-  if (p.includes('oop') || p.includes('class') || p.includes('object')) {
-    return `### 🏗️ Object-Oriented Programming (OOP) in Java
+  // 5. Conditionals (If-Else, Switch)
+  if (p.includes('if') || p.includes('else') || p.includes('condition') || p.includes('switch') || p.includes('decision')) {
+    return `### 🔀 Decision Making: If, Else If, Else
 
-Java is centered around **Classes** and **Objects**. Here is the easiest mental model:
-
-* **The Class** is the **Blueprint** (or cookie cutter). It defines what properties and behaviors exist.
-* **The Object** is the **Actual House** (or cookie) built from that blueprint.
+Conditionals allow your code to make intelligent decisions:
 
 \`\`\`java
-// Blueprint
-class Robot {
-    // 1. Attributes (State / Fields)
-    String name;
-    int batteryLevel;
+public class Main {
+    public static void main(String[] args) {
+        int temperature = 75;
 
-    // 2. Constructor (How we build a Robot)
-    public Robot(String robotName, int battery) {
-        name = robotName;
-        batteryLevel = battery;
+        if (temperature > 85) {
+            System.out.println("It's hot outside! Stay hydrated. ☀️");
+        } else if (temperature >= 65) {
+            System.out.println("Pleasant weather for coding outdoors! 🌤️");
+        } else {
+            System.out.println("Chilly! Grab a warm sweater. ❄️");
+        }
+    }
+}
+\`\`\`
+
+#### Useful Comparison Operators:
+- \`==\` Equal to (e.g. \`x == 5\`)
+- \`!=\` Not equal to
+- \`>\` and \`<\` Greater / Less than
+- \`&&\` AND (both must be true)
+- \`||\` OR (at least one must be true)`;
+  }
+
+  // 6. User Input with Scanner
+  if (p.includes('scanner') || p.includes('input') || p.includes('read') || p.includes('keyboard')) {
+    return `### ⌨️ Reading Input with Java Scanner
+
+To read input from the keyboard, use the \`Scanner\` class from \`java.util\`:
+
+\`\`\`java
+import java.util.Scanner;
+
+public class Main {
+    public static void main(String[] args) {
+        // 1. Create a Scanner attached to System.in
+        Scanner scanner = new Scanner(System.in);
+
+        System.out.print("What is your name? ");
+        String name = scanner.nextLine();
+
+        System.out.print("How many years have you coded? ");
+        int years = scanner.nextInt();
+
+        System.out.println("Welcome, " + name + "! You have " + years + " years experience.");
+
+        scanner.close();
+    }
+}
+\`\`\`
+
+> 💡 **Tip for our Studio**: When testing \`Scanner\` code in DukeAI Studio, open the **Stdin** drawer in the terminal bar below and enter your inputs line by line!`;
+  }
+
+  // 7. Methods and Functions
+  if (p.includes('method') || p.includes('function') || p.includes('parameter') || p.includes('return') || p.includes('void')) {
+    return `### 🛠️ Java Methods (Functions)
+
+Methods are reusable recipes of code that do a specific task. They prevent code duplication.
+
+\`\`\`java
+public class Main {
+    // 1. A method that takes inputs (parameters) and returns a result:
+    public static int multiply(int a, int b) {
+        return a * b;
     }
 
-    // 3. Methods (Behaviors / Actions)
-    public void speak() {
-        System.out.println("Beep boop! I am " + name + " with " + batteryLevel + "% battery.");
+    // 2. A 'void' method that simply performs an action:
+    public static void greetUser(String username) {
+        System.out.println("Hello, " + username + "! Ready to code?");
+    }
+
+    public static void main(String[] args) {
+        greetUser("Alex");
+
+        int product = multiply(6, 7);
+        System.out.println("6 x 7 = " + product);
+    }
+}
+\`\`\`
+
+- **\`void\`**: Means the method does not return a value.
+- **\`static\`**: Means you can call it directly from \`main\` without creating an object.`;
+  }
+
+  // 8. Arrays and Lists
+  if (p.includes('array') || p.includes('list') || p.includes('collection')) {
+    return `### 📚 Arrays in Java
+
+An **Array** stores multiple values of the same type in a single variable:
+
+\`\`\`java
+public class Main {
+    public static void main(String[] args) {
+        // Declaring and initializing an array of strings
+        String[] fruits = { "Apple", "Banana", "Orange", "Mango" };
+
+        // Accessing by 0-based index:
+        System.out.println("First fruit: " + fruits[0]); // Apple
+        System.out.println("Total fruits: " + fruits.length);
+
+        // Printing every fruit with a modern for-each loop:
+        System.out.println("\nAll Fruits:");
+        for (String fruit : fruits) {
+            System.out.println("• " + fruit);
+        }
+    }
+}
+\`\`\`
+
+> ⚠️ Remember: Arrays in Java have a **fixed size**. Once created, their length cannot change!`;
+  }
+
+  // 9. Object-Oriented Programming (OOP)
+  if (p.includes('oop') || p.includes('class') || p.includes('object') || p.includes('constructor') || p.includes('this') || p.includes('inheritance')) {
+    return `### 🏛️ Object-Oriented Programming (OOP)
+
+In Java, everything revolves around **Classes** and **Objects**:
+- **Class**: The **Blueprint** (e.g., blueprints for a House or Car).
+- **Object**: The **Actual Instance** built from the blueprint.
+
+\`\`\`java
+// 1. The Blueprint Class
+class BankAccount {
+    String accountHolder;
+    double balance;
+
+    // Constructor: initializes new accounts
+    public BankAccount(String name, double initialDeposit) {
+        accountHolder = name;
+        balance = initialDeposit;
+    }
+
+    // Method: behavior
+    public void deposit(double amount) {
+        balance += amount;
+        System.out.println(accountHolder + " deposited $" + amount + ". New balance: $" + balance);
     }
 }
 
 public class Main {
     public static void main(String[] args) {
-        // Creating two distinct Objects from the Robot blueprint:
-        Robot r1 = new Robot("R2-D2", 95);
-        Robot r2 = new Robot("Wall-E", 40);
+        // Creating two independent objects
+        BankAccount acc1 = new BankAccount("Alice", 250.0);
+        BankAccount acc2 = new BankAccount("Bob", 100.0);
 
-        r1.speak();
-        r2.speak();
+        acc1.deposit(50.0);
+        acc2.deposit(75.0);
     }
 }
 \`\`\`
 
-Notice how each robot has its own independent state! Try copying this code into the editor to create your own custom robot!`;
+Click **Insert to Editor** to run this banking system!`;
   }
 
-  if (p.includes('quiz')) {
-    return `### 🧠 Quick Java Beginner Quiz!
+  // 10. Beginner Projects (Calculator, Games, etc.)
+  if (p.includes('calculator') || p.includes('project') || p.includes('build') || p.includes('game') || p.includes('example')) {
+    return `### 🧮 Project: Java Console Calculator
 
-Let's test your Java instincts! Look at this snippet:
+Here is a complete, beginner-friendly calculator project you can run right now:
 
 \`\`\`java
-int x = 10;
-int y = 3;
-System.out.println(x / y);
+public class Main {
+    public static void calculate(double num1, double num2, char operator) {
+        double result = 0;
+        boolean valid = true;
+
+        switch (operator) {
+            case '+': result = num1 + num2; break;
+            case '-': result = num1 - num2; break;
+            case '*': result = num1 * num2; break;
+            case '/': 
+                if (num2 != 0) {
+                    result = num1 / num2; 
+                } else {
+                    System.out.println("Error: Cannot divide by zero!");
+                    valid = false;
+                }
+                break;
+            default:
+                System.out.println("Invalid operator: " + operator);
+                valid = false;
+        }
+
+        if (valid) {
+            System.out.println(num1 + " " + operator + " " + num2 + " = " + result);
+        }
+    }
+
+    public static void main(String[] args) {
+        System.out.println("=== DukeAI Java Calculator ===");
+        calculate(15, 5, '+');
+        calculate(20, 4, '-');
+        calculate(7, 8, '*');
+        calculate(100, 4, '/');
+    }
+}
 \`\`\`
 
-**What will this print?**
-- **A)** \`3.33333333\`
+Click **Insert to Editor** and press **Run Code** to try it!`;
+  }
+
+  // 11. Quizzes
+  if (p.includes('quiz') || p.includes('test') || p.includes('question')) {
+    return `### 🧠 Java Beginner Quiz!
+
+**Question**: What is the output of the following Java code?
+
+\`\`\`java
+int a = 7;
+int b = 2;
+System.out.println(a / b);
+\`\`\`
+
+- **A)** \`3.5\`
 - **B)** \`3\`
-- **C)** \`3.0\`
-- **D)** Compilation Error
+- **C)** \`4\`
+- **D)** Runtime Exception
 
-*(Hint: Think about what happens when both numbers in division are \`int\` types!)*
-Reply with your answer and I'll explain what's happening under the hood!`;
+*(Think carefully about what happens when you divide two integers in Java! Reply with your letter choice and I will explain!)*`;
   }
 
-  // General beginner greeting / guidance
-  return `### 👋 Welcome to Java Programming!
+  // Default intelligent response with prompt suggestions
+  return `### ☕ DukeAI Java Tutor
 
-I'm **DukeAI**, your interactive Java tutor. Whether you've never written a line of code or you're brushing up on Object-Oriented principles, I'm here to guide you step-by-step!
+You asked: *"**${prompt}**"*
 
-Here are some great ways to start right now:
-1. 📚 **Select a Lesson** from the **Lessons** dropdown above (e.g. *Variables*, *Loops*, or *OOP*).
-2. 🚀 **Run the Editor Code** using **Ctrl + Enter** (or the glowing **Run Code** button) to see instant output in the console.
-3. 💬 **Ask me anything!** Try asking:
-   - *"Explain how if-else works with an example"*
-   - *"What is public static void main?"*
-   - *"Give me a beginner practice challenge"*
-   - *"Quiz me on loops"*
+I'm here to guide you! Here are some great concepts we can dive into:
 
-*(💡 Optional: Click the **⚙ Settings** button in the header if you'd like to add a Gemini API key for unlimited AI chat capability!)*`;
+- 📦 **Variables & Data Types**: How to store numbers, decimals, text, and booleans.
+- 🔀 **Conditionals**: Making decisions with \`if\`, \`else if\`, and \`switch\`.
+- 🔁 **Loops**: Automating repetition with \`for\` and \`while\`.
+- 🛠️ **Methods**: Writing modular, reusable blocks of code.
+- 🏗️ **Object-Oriented Programming**: Blueprints (classes) and real-world objects.
+- 🧮 **Projects**: Building a Calculator, Number Guessing Game, or Bank System.
+
+> 🔑 **Pro Tip**: To connect DukeAI to live Google Gemini AI for unlimited conversational freedom, click the **⚙ Settings** button in the header or paste your Gemini API key directly into this chat!
+
+What would you like to build or learn first?`;
 }
 
 // Health check route
@@ -503,7 +779,8 @@ app.get('/api/health', (req, res) => {
   res.json({
     status: 'online',
     timestamp: new Date().toISOString(),
-    nodeVersion: process.version
+    nodeVersion: process.version,
+    hasGeminiKey: Boolean(process.env.GEMINI_API_KEY)
   });
 });
 

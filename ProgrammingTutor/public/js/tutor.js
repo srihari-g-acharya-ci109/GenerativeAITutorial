@@ -38,18 +38,45 @@ export class TutorController {
       });
     });
 
+    this.updateTutorRoleBadge();
+    const rolePill = document.querySelector('.tutor-role-pill');
+    if (rolePill) {
+      rolePill.style.cursor = 'pointer';
+      rolePill.addEventListener('click', () => {
+        document.getElementById('openSettingsBtn')?.click();
+      });
+    }
+
     // Send initial welcome message if empty
     if (this.messages.length === 0) {
+      const hasKey = Boolean(this.getApiKey());
       this.addAssistantMessage(`### 👋 Hello! I'm DukeAI, your Java Tutor!
 
-I'm here to help you master Java from the ground up. Here are some fun ways we can learn together:
-
+I'm here to help you master Java from the ground up:
 - 💡 Click **"Explain Code"** to break down the Java code in your editor line-by-line.
 - 🎯 Ask me: *"How do loops work?"* or *"What is public static void main?"*
 - 🧩 Click **"Take a Quiz"** to test your knowledge with interactive questions!
 - ⚡ If you hit an error while running code, I'll diagnose it instantly.
+${!hasKey ? '\n> 🔑 *Tip: You can click the **⚙ Settings** button above or paste a Google Gemini API key right here in the chat to enable real-time Gemini AI!*' : ''}
 
 What would you like to explore today?`);
+    }
+  }
+
+  updateTutorRoleBadge() {
+    const rolePill = document.querySelector('.tutor-role-pill');
+    if (!rolePill) return;
+    const apiKey = this.getApiKey();
+    if (apiKey) {
+      rolePill.textContent = '✨ Gemini AI Online';
+      rolePill.style.background = 'rgba(0, 242, 254, 0.15)';
+      rolePill.style.borderColor = 'rgba(0, 242, 254, 0.4)';
+      rolePill.style.color = '#38bdf8';
+    } else {
+      rolePill.textContent = 'Offline Engine (Add Key ⚙)';
+      rolePill.style.background = 'rgba(139, 92, 246, 0.15)';
+      rolePill.style.borderColor = 'rgba(139, 92, 246, 0.35)';
+      rolePill.style.color = '#c4b5fd';
     }
   }
 
@@ -127,8 +154,18 @@ Please explain to me:
 
     this.chatInput.value = '';
     this.chatInput.style.height = 'auto';
-    this.addUserMessage(text);
 
+    // Direct API Key paste detection
+    if (text.startsWith('AIzaSy') || (text.length >= 35 && /^[A-Za-z0-9_-]{35,50}$/.test(text) && !text.includes(' '))) {
+      localStorage.setItem('duke_ai_gemini_api_key', text);
+      this.updateTutorRoleBadge();
+      this.addUserMessage('•••••••••••••••••••••••••••••••••••• (API Key Provided)');
+      this.addAssistantMessage(`🎉 **Google Gemini API Key Configured!**
+DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You have full conversational freedom. Ask me any question, paste code, or request a custom lesson!`);
+      return;
+    }
+
+    this.addUserMessage(text);
     const codeContext = this.getEditorCode();
     this.fetchTutorResponse(text, codeContext);
   }
