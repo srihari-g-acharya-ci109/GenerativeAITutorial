@@ -1,0 +1,348 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>DukeAI · Java Programming Tutor & Interactive Studio</title>
+  <meta name="description" content="Master Java programming from scratch with DukeAI - featuring an intelligent beginner tutor, live Monaco code editor, and built-in Java compiler.">
+  
+  <!-- Premium Google Fonts: Plus Jakarta Sans & JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  
+  <!-- Monaco Editor CDN loader -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/monaco-editor/0.45.0/min/vs/loader.min.js"></script>
+
+  <!-- App Stylesheet -->
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <!-- Ambient background glow layers -->
+  <div class="ambient-glow glow-top-left"></div>
+  <div class="ambient-glow glow-bottom-right"></div>
+  <div class="noise-overlay"></div>
+
+  <div class="app-root">
+    <!-- Top Header Navigation -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <div class="logo-bezel">
+            <span class="logo-icon">☕</span>
+          </div>
+          <div class="logo-text">
+            <span class="brand-title">Duke<span class="gradient-text">AI</span></span>
+            <span class="brand-badge">Java 21 Studio</span>
+          </div>
+        </div>
+
+        <div class="nav-divider"></div>
+
+        <!-- Lesson Selector Dropdown -->
+        <div class="lesson-picker-container">
+          <button class="lesson-dropdown-btn" id="openLessonsDrawerBtn" title="View all Java beginner lessons">
+            <span class="book-icon">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"></path>
+                <path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"></path>
+              </svg>
+            </span>
+            <span class="current-lesson-title" id="currentLessonLabel">1. Hello, Java! & Structure</span>
+            <svg class="chevron-icon" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polyline points="6 9 12 15 18 9"></polyline>
+            </svg>
+          </button>
+        </div>
+      </div>
+
+      <div class="header-actions">
+        <!-- Template Reset -->
+        <button class="secondary-btn" id="resetCodeBtn" title="Reset editor to current lesson template">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M3 12a9 9 0 0 1 9-9 9.75 9.75 0 0 1 6.74 2.74L21 8"></path>
+            <path d="M21 3v5h-5"></path>
+            <path d="M21 12a9 9 0 0 1-9 9 9.75 9.75 0 0 1-6.74-2.74L3 16"></path>
+            <path d="M3 21v-5h5"></path>
+          </svg>
+          <span>Reset</span>
+        </button>
+
+        <!-- Format Code -->
+        <button class="secondary-btn" id="formatCodeBtn" title="Format Java code (Shift+Alt+F)">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <polyline points="16 18 22 12 16 6"></polyline>
+            <polyline points="8 6 2 12 8 18"></polyline>
+          </svg>
+          <span>Format</span>
+        </button>
+
+        <!-- Download .java -->
+        <button class="secondary-btn" id="downloadCodeBtn" title="Download Main.java file">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+            <polyline points="7 10 12 15 17 10"></polyline>
+            <line x1="12" y1="15" x2="12" y2="3"></line>
+          </svg>
+          <span>Export</span>
+        </button>
+
+        <!-- Primary Run Code Button -->
+        <button class="primary-run-btn" id="runBtn" title="Compile and Execute Java Code (Ctrl+Enter)">
+          <span class="run-text">Run Code</span>
+          <div class="run-icon-wrapper">
+            <svg class="play-icon" width="14" height="14" viewBox="0 0 24 24" fill="currentColor">
+              <polygon points="5 3 19 12 5 21 5 3"></polygon>
+            </svg>
+          </div>
+          <span class="kbd-hint">Ctrl+↵</span>
+        </button>
+
+        <!-- Settings Modal Trigger -->
+        <button class="icon-btn" id="openSettingsBtn" title="Configure AI Provider & API Keys">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"></circle>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"></path>
+          </svg>
+        </button>
+      </div>
+    </header>
+
+    <!-- Main Workspace Split Container -->
+    <main class="app-workspace">
+      <!-- Left Pane: DukeAI Tutor Chatbot -->
+      <section class="panel-outer chat-panel-outer" id="chatPane">
+        <div class="panel-inner chat-panel-inner">
+          <div class="panel-header chat-header">
+            <div class="panel-title-group">
+              <div class="ai-status-pulse"></div>
+              <span class="panel-title">DukeAI Tutor</span>
+              <span class="tutor-role-pill">Beginner Pedagogy</span>
+            </div>
+            <div class="panel-header-actions">
+              <button class="mini-icon-btn" id="clearChatBtn" title="Clear Chat History">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <polyline points="3 6 5 6 21 6"></polyline>
+                  <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+
+          <!-- Chat Messages Area -->
+          <div class="chat-messages" id="chatMessages">
+            <!-- Messages inserted dynamically via tutor.js -->
+          </div>
+
+          <!-- Quick Context Chips -->
+          <div class="prompt-chips-wrapper">
+            <div class="prompt-chips-scroll" id="promptChips">
+              <button class="prompt-chip" data-action="explain-code">
+                <span>💡 Explain Code</span>
+              </button>
+              <button class="prompt-chip" data-action="find-bugs">
+                <span>🐛 Find Bugs / Fix</span>
+              </button>
+              <button class="prompt-chip" data-action="quiz-me">
+                <span>🧠 Quiz Me</span>
+              </button>
+              <button class="prompt-chip" data-action="simplify">
+                <span>☕ Simplify OOP</span>
+              </button>
+              <button class="prompt-chip" data-action="challenge">
+                <span>🚀 Mini Challenge</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- Chat Input Footer -->
+          <div class="chat-input-container">
+            <div class="chat-input-bezel">
+              <textarea 
+                id="chatInput" 
+                placeholder="Ask DukeAI anything about Java, concepts, or errors..." 
+                rows="1"
+              ></textarea>
+              <button class="chat-send-btn" id="sendChatBtn" title="Send Question (Enter)">
+                <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                  <line x1="22" y1="2" x2="11" y2="13"></line>
+                  <polygon points="22 2 15 22 11 13 2 9 22 2"></polygon>
+                </svg>
+              </button>
+            </div>
+            <div class="chat-footer-caption">
+              <span>DukeAI uses line-by-line pedagogical guidance</span>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Horizontal Divider -->
+      <div class="workspace-resizer" id="horizontalResizer"></div>
+
+      <!-- Right Column: Code Editor + Execution Console -->
+      <div class="right-column" id="rightColumn">
+        <!-- Top-Right: Monaco Java Code Editor -->
+        <section class="panel-outer editor-panel-outer" id="editorPane">
+          <div class="panel-inner editor-panel-inner">
+            <div class="panel-header editor-header">
+              <div class="editor-tabs">
+                <div class="tab-item active">
+                  <span class="java-file-icon">☕</span>
+                  <span class="tab-name" id="activeFileName">Main.java</span>
+                  <span class="tab-badge">JDK 21</span>
+                </div>
+              </div>
+              <div class="panel-header-actions">
+                <span class="editor-hint">Press <kbd>Ctrl</kbd>+<kbd>Enter</kbd> to compile</span>
+              </div>
+            </div>
+
+            <!-- Monaco Editor Container -->
+            <div class="monaco-wrapper" id="monacoEditorContainer">
+              <div class="monaco-loading">
+                <div class="spinner"></div>
+                <span>Initializing Monaco Java Studio...</span>
+              </div>
+            </div>
+          </div>
+        </section>
+
+        <!-- Vertical Resizer between Editor and Terminal -->
+        <div class="vertical-resizer" id="verticalResizer"></div>
+
+        <!-- Bottom-Right: Compiler Output Terminal -->
+        <section class="panel-outer terminal-panel-outer" id="terminalPane">
+          <div class="panel-inner terminal-panel-inner">
+            <div class="panel-header terminal-header">
+              <div class="panel-title-group">
+                <span class="terminal-prompt-symbol">$</span>
+                <span class="panel-title">Compiler & Execution Terminal</span>
+                <span class="status-indicator idle" id="terminalStatus">Idle</span>
+                <span class="terminal-meta" id="terminalMeta"></span>
+              </div>
+              <div class="terminal-actions">
+                <button class="secondary-btn btn-sm" id="toggleStdinBtn" title="Toggle standard input (Scanner)">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <polyline points="4 17 10 11 4 5"></polyline>
+                    <line x1="12" y1="19" x2="20" y2="19"></line>
+                  </svg>
+                  <span>Stdin</span>
+                </button>
+                <button class="secondary-btn btn-sm" id="clearConsoleBtn" title="Clear console output">
+                  <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <circle cx="12" cy="12" r="10"></circle>
+                    <line x1="4.93" y1="4.93" x2="19.07" y2="19.07"></line>
+                  </svg>
+                  <span>Clear</span>
+                </button>
+              </div>
+            </div>
+
+            <!-- Optional Stdin Drawer -->
+            <div class="stdin-drawer" id="stdinDrawer">
+              <div class="stdin-header">
+                <span>Standard Input (Stdin for Scanner)</span>
+                <span class="stdin-hint">Each line is read by scanner.nextLine() or nextInt()</span>
+              </div>
+              <textarea id="stdinInput" placeholder="Enter input passed to System.in (one input per line)..." rows="2"></textarea>
+            </div>
+
+            <!-- Terminal Output Scrollable Area -->
+            <div class="terminal-output" id="terminalOutput">
+              <div class="terminal-placeholder">
+                <span class="pulse-dot"></span>
+                Console ready. Click <strong>Run Code</strong> or press <strong>Ctrl+Enter</strong> to compile with JDK 21.
+              </div>
+            </div>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <!-- Slide-over Lessons Drawer -->
+    <div class="drawer-backdrop" id="lessonsDrawerBackdrop"></div>
+    <aside class="lessons-drawer" id="lessonsDrawer">
+      <div class="drawer-header">
+        <div class="drawer-title-group">
+          <span class="drawer-badge">Beginner Roadmap</span>
+          <h2>Java Learning Path</h2>
+        </div>
+        <button class="mini-icon-btn" id="closeLessonsDrawerBtn" title="Close Drawer">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <line x1="18" y1="6" x2="6" y2="18"></line>
+            <line x1="6" y1="6" x2="18" y2="18"></line>
+          </svg>
+        </button>
+      </div>
+      <div class="lessons-list" id="lessonsList">
+        <!-- Lessons populated dynamically via JS -->
+      </div>
+    </aside>
+
+    <!-- Settings & API Key Modal -->
+    <div class="modal-backdrop" id="settingsModalBackdrop">
+      <div class="modal-card">
+        <div class="modal-header">
+          <div class="modal-title-group">
+            <span class="modal-badge">Preferences</span>
+            <h3>AI Tutor Configuration</h3>
+          </div>
+          <button class="mini-icon-btn" id="closeSettingsModalBtn">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        <div class="modal-body">
+          <p class="modal-desc">
+            DukeAI includes a built-in pedagogical knowledge engine that works immediately without any API key. To unlock full real-time Gemini AI capabilities, enter your Google Gemini API key below.
+          </p>
+
+          <div class="form-group">
+            <label for="geminiApiKeyInput">Google Gemini API Key (Optional)</label>
+            <input 
+              type="password" 
+              id="geminiApiKeyInput" 
+              placeholder="AIzaSy..." 
+              autocomplete="off"
+            />
+            <span class="field-hint">
+              Get a free API key from <a href="https://aistudio.google.com/app/apikey" target="_blank" rel="noopener">Google AI Studio ↗</a>. Your key stays stored locally in your browser.
+            </span>
+          </div>
+
+          <div class="form-group">
+            <label for="modelSelect">Gemini Model</label>
+            <select id="modelSelect">
+              <option value="gemini-2.5-flash" selected>Gemini 2.5 Flash (Recommended - Ultra Fast)</option>
+              <option value="gemini-1.5-flash">Gemini 1.5 Flash (Lightweight)</option>
+              <option value="gemini-1.5-pro">Gemini 1.5 Pro (Deep Reasoning)</option>
+            </select>
+          </div>
+
+          <div class="system-status-box">
+            <div class="status-row">
+              <span class="status-lbl">Compiler Engine:</span>
+              <span class="status-val highlight">Java SE 21.0.8 (Local JDK)</span>
+            </div>
+            <div class="status-row">
+              <span class="status-lbl">Cloud Fallback:</span>
+              <span class="status-val">Piston Execution API (Active)</span>
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="secondary-btn" id="cancelSettingsBtn">Cancel</button>
+          <button class="primary-btn" id="saveSettingsBtn">Save Settings</button>
+        </div>
+      </div>
+    </div>
+
+  </div>
+
+  <!-- Main JavaScript modules -->
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

@@ -1,0 +1,25 @@
+{
+  "name": "java-programming-tutor",
+  "version": "1.0.0",
+  "description": "Interactive Java programming tutor chatbot and built-in Java compiler for beginners",
+  "main": "server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js"
+  },
+  "dependencies": {
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.7",
+    "express": "^4.21.2"
+  },
+  "keywords": [
+    "java",
+    "tutor",
+    "chatbot",
+    "compiler",
+    "education"
+  ],
+  "author": "DukeAI Team",
+  "license": "MIT"
+}
