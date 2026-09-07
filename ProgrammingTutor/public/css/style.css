@@ -1,5 +1,5 @@
 /* ===================================================================
-   DukeAI · Java Tutor & Studio Design System
+   Gemini · Java Tutor & Studio Design System
    Aesthetic: Ethereal Dark OLED, Double-Bezel Containers, Kinetic Motion
    =================================================================== */
 
@@ -515,7 +515,8 @@ html, body {
   box-shadow: 0 4px 10px rgba(59, 130, 246, 0.3);
 }
 
-.assistant-msg .msg-avatar.duke-avatar {
+.assistant-msg .msg-avatar.gemini-avatar,
+.assistant-msg .msg-avatar.tutor-avatar {
   background: linear-gradient(135deg, rgba(0, 242, 254, 0.15), rgba(79, 172, 254, 0.25));
   border: 1px solid var(--border-highlight);
   color: var(--accent-cyan);

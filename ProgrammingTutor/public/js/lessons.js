@@ -17,13 +17,13 @@ Every Java program starts with a **Class** and a **main method**.
     public static void main(String[] args) {
         // Welcome to your first Java program!
         System.out.println("Hello, World!");
-        System.out.println("I am learning Java with DukeAI! 🚀");
+        System.out.println("I am learning Java with Gemini AI! 🚀");
         
         // Try changing the message or adding your own print statement below:
         
     }
 }`,
-    expectedOutput: `Hello, World!\nI am learning Java with DukeAI! 🚀`,
+    expectedOutput: `Hello, World!\nI am learning Java with Gemini AI! 🚀`,
     challenge: 'Add a third print statement that outputs your favorite hobby or coding goal.'
   },
   {
@@ -125,7 +125,7 @@ Conditionals allow your code to take different paths:
         } else if (score >= 70) {
             System.out.println("Letter Grade: C - Good effort. Keep practicing!");
         } else {
-            System.out.println("Letter Grade: Needs improvement. DukeAI is here to help!");
+            System.out.println("Letter Grade: Needs improvement. Practice with Gemini AI!");
         }
     }
 }`,

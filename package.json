@@ -1,7 +1,7 @@
 {
   "name": "college-genai-tutor",
   "version": "1.0.0",
-  "description": "DukeAI Java programming tutor and compiler workspace",
+  "description": "Gemini Java programming tutor and compiler workspace",
   "scripts": {
     "start": "npm --prefix ProgrammingTutor start",
     "dev": "npm --prefix ProgrammingTutor run dev"

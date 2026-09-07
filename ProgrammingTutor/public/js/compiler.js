@@ -153,7 +153,7 @@ export class CompilerController {
       errBlock.innerHTML = formattedHtml;
       this.terminalOutput.appendChild(errBlock);
 
-      // Create interactive "Ask Duke AI to Diagnose" action card
+      // Create interactive "Ask Gemini AI to Diagnose" action card
       const diagnoseCard = document.createElement('div');
       diagnoseCard.className = 'diagnose-banner';
       diagnoseCard.innerHTML = `
@@ -166,10 +166,10 @@ export class CompilerController {
         </div>
         <div class="diagnose-text">
           <strong>Need help fixing this error?</strong>
-          <span>DukeAI can explain the exact cause and show you how to resolve it.</span>
+          <span>Gemini AI can explain the exact cause and show you how to resolve it.</span>
         </div>
         <button class="diagnose-btn" id="askTutorAboutErrorBtn">
-          <span>Ask DukeAI to Explain</span>
+          <span>Ask Gemini to Explain</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
             <polyline points="9 18 15 12 9 6"></polyline>
           </svg>

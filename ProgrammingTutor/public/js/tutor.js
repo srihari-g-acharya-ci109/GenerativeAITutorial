@@ -1,4 +1,4 @@
-// AI Java Tutor (DukeAI) Client Controller
+// Gemini Java Tutor Client Controller
 
 export class TutorController {
   constructor(getEditorCodeFn, setEditorCodeFn) {
@@ -38,54 +38,19 @@ export class TutorController {
       });
     });
 
-    this.updateTutorRoleBadge();
-    const rolePill = document.querySelector('.tutor-role-pill');
-    if (rolePill) {
-      rolePill.style.cursor = 'pointer';
-      rolePill.addEventListener('click', () => {
-        document.getElementById('openSettingsBtn')?.click();
-      });
-    }
-
     // Send initial welcome message if empty
     if (this.messages.length === 0) {
-      const hasKey = Boolean(this.getApiKey());
-      this.addAssistantMessage(`### 👋 Hello! I'm DukeAI, your Java Tutor!
+      this.addAssistantMessage(`### ✨ Welcome! I'm your Gemini Java Tutor!
 
-I'm here to help you master Java from the ground up:
+I'm powered by Google Gemini to help you master Java programming step-by-step:
+
 - 💡 Click **"Explain Code"** to break down the Java code in your editor line-by-line.
-- 🎯 Ask me: *"How do loops work?"* or *"What is public static void main?"*
+- 🎯 Ask me anything: *"How do loops work?"*, *"Explain fibonacci"*, or *"How does Scanner work?"*
 - 🧩 Click **"Take a Quiz"** to test your knowledge with interactive questions!
 - ⚡ If you hit an error while running code, I'll diagnose it instantly.
-${!hasKey ? '\n> 🔑 *Tip: You can click the **⚙ Settings** button above or paste a Google Gemini API key right here in the chat to enable real-time Gemini AI!*' : ''}
 
-What would you like to explore today?`);
+What Java topic would you like to explore today?`);
     }
-  }
-
-  updateTutorRoleBadge() {
-    const rolePill = document.querySelector('.tutor-role-pill');
-    if (!rolePill) return;
-    const apiKey = this.getApiKey();
-    if (apiKey) {
-      rolePill.textContent = '✨ Gemini AI Online';
-      rolePill.style.background = 'rgba(0, 242, 254, 0.15)';
-      rolePill.style.borderColor = 'rgba(0, 242, 254, 0.4)';
-      rolePill.style.color = '#38bdf8';
-    } else {
-      rolePill.textContent = 'Offline Engine (Add Key ⚙)';
-      rolePill.style.background = 'rgba(139, 92, 246, 0.15)';
-      rolePill.style.borderColor = 'rgba(139, 92, 246, 0.35)';
-      rolePill.style.color = '#c4b5fd';
-    }
-  }
-
-  getApiKey() {
-    return localStorage.getItem('duke_ai_gemini_api_key') || '';
-  }
-
-  getModel() {
-    return localStorage.getItem('duke_ai_model') || 'gemini-2.5-flash';
   }
 
   resetChat() {
@@ -155,16 +120,6 @@ Please explain to me:
     this.chatInput.value = '';
     this.chatInput.style.height = 'auto';
 
-    // Direct API Key paste detection
-    if (text.startsWith('AIzaSy') || (text.length >= 35 && /^[A-Za-z0-9_-]{35,50}$/.test(text) && !text.includes(' '))) {
-      localStorage.setItem('duke_ai_gemini_api_key', text);
-      this.updateTutorRoleBadge();
-      this.addUserMessage('•••••••••••••••••••••••••••••••••••• (API Key Provided)');
-      this.addAssistantMessage(`🎉 **Google Gemini API Key Configured!**
-DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You have full conversational freedom. Ask me any question, paste code, or request a custom lesson!`);
-      return;
-    }
-
     this.addUserMessage(text);
     const codeContext = this.getEditorCode();
     this.fetchTutorResponse(text, codeContext);
@@ -194,12 +149,9 @@ DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You hav
     const msgEl = document.createElement('div');
     msgEl.className = 'chat-message assistant-msg';
     msgEl.innerHTML = `
-      <div class="msg-avatar duke-avatar">
+      <div class="msg-avatar gemini-avatar">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"></path>
-          <circle cx="9" cy="13" r="1"></circle>
-          <circle cx="15" cy="13" r="1"></circle>
-          <path d="M10 17c.5.5 1.5.5 2 0"></path>
+          <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path>
         </svg>
       </div>
       <div class="msg-bubble">
@@ -217,9 +169,9 @@ DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You hav
     typingEl.id = 'typingIndicator';
     typingEl.className = 'chat-message assistant-msg typing';
     typingEl.innerHTML = `
-      <div class="msg-avatar duke-avatar">
+      <div class="msg-avatar gemini-avatar">
         <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M12 2a4 4 0 0 0-4 4v2H6a2 2 0 0 0-2 2v10a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V10a2 2 0 0 0-2-2h-2V6a4 4 0 0 0-4-4z"></path>
+          <path d="M12 2v4m0 12v4M4.93 4.93l2.83 2.83m8.48 8.48l2.83 2.83M2 12h4m12 0h4M4.93 19.07l2.83-2.83m8.48-8.48l2.83-2.83"></path>
         </svg>
       </div>
       <div class="msg-bubble typing-bubble">
@@ -242,17 +194,12 @@ DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You hav
     this.sendBtn.setAttribute('disabled', 'true');
     this.showTypingIndicator();
 
-    const apiKey = this.getApiKey();
-    const model = this.getModel();
-
     try {
       const response = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           messages: this.messages,
-          apiKey: apiKey || undefined,
-          model,
           codeContext: codeContext || undefined
         })
       });
@@ -268,7 +215,7 @@ DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You hav
       this.addAssistantMessage(data.reply);
     } catch (err) {
       this.removeTypingIndicator();
-      this.addAssistantMessage(`⚠️ **Oops!** I ran into a problem connecting: \`${err.message}\`\n\n*Tip: If you're using a Gemini API key, check that it's valid in ⚙ Settings, or leave it blank to use DukeAI's built-in tutor engine!*`);
+      this.addAssistantMessage(`⚠️ **Gemini AI Notice**: \`${err.message}\`\n\n*Make sure \`GEMINI_API_KEY\` is set in your \`.env\` file.*`);
     } finally {
       this.isGenerating = false;
       this.sendBtn.removeAttribute('disabled');
@@ -278,7 +225,7 @@ DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You hav
 
   bindCodeBlockButtons(container) {
     container.querySelectorAll('.code-action-btn').forEach(btn => {
-      btn.addEventListener('click', (e) => {
+      btn.addEventListener('click', () => {
         const action = btn.dataset.action;
         const codeWrapper = btn.closest('.chat-code-block');
         const code = codeWrapper ? codeWrapper.querySelector('code').innerText : '';
@@ -313,7 +260,7 @@ DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You hav
       .replace(/"/g, '&quot;');
   }
 
-  // Lightweight Markdown parser with code blocks, headings, bolding, blockquotes
+  // Markdown parser with code blocks, headings, bolding, blockquotes
   renderMarkdown(text) {
     let html = text;
 
@@ -366,7 +313,7 @@ DukeAI is now directly powered by Google Gemini AI (${this.getModel()}). You hav
     html = html.replace(/^\s*-\s+(.*$)/gim, '<li>$1</li>');
     html = html.replace(/(<li>.*<\/li>)/s, '<ul>$1</ul>');
 
-    // Paragraphs (split by double newlines)
+    // Paragraphs
     const blocks = html.split(/\n\n+/);
     html = blocks.map(block => {
       const trimmed = block.trim();

@@ -8,10 +8,13 @@ import { spawn } from 'child_process';
 import { randomUUID } from 'crypto';
 import { fileURLToPath } from 'url';
 
-dotenv.config();
-
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Explicitly load .env from project directory or root
+dotenv.config({ path: path.join(__dirname, '.env') });
+dotenv.config({ path: path.join(__dirname, '..', '.env') });
+dotenv.config();
 
 const app = express();
 const PORT = process.env.PORT || 3030;
@@ -230,11 +233,11 @@ app.post('/api/compile', async (req, res) => {
 async function callGeminiApi(apiKey, model, systemInstruction, contents) {
   const candidateModels = [
     model,
-    'gemini-2.5-flash',
-    'gemini-2.0-flash',
-    'gemini-1.5-flash',
     'gemini-3.6-flash',
-    'gemini-2.5-flash-lite'
+    'gemini-3.5-flash-lite',
+    'gemini-3.5-flash',
+    'gemini-flash-latest',
+    'gemini-3.7-flash'
   ];
 
   const modelsToTry = [...new Set(candidateModels.filter(Boolean))];
@@ -288,18 +291,18 @@ async function callGeminiApi(apiKey, model, systemInstruction, contents) {
 
 // AI Tutor Chat Route
 app.post('/api/chat', async (req, res) => {
-  const { messages, apiKey: userApiKey, model: userModel, codeContext } = req.body;
+  const { messages, codeContext } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'Messages array is required' });
   }
 
-  const effectiveApiKey = (userApiKey && userApiKey.trim()) || process.env.GEMINI_API_KEY || '';
-  const targetModel = userModel || 'gemini-2.5-flash';
+  const effectiveApiKey = (process.env.GEMINI_API_KEY || '').trim();
+  const targetModel = 'gemini-3.6-flash';
 
-  const systemInstruction = `You are DukeAI, a world-class, welcoming, and encouraging Java programming tutor designed specifically for beginners.
+  const systemInstruction = `You are Gemini Java Tutor, an expert, welcoming, and encouraging Java programming tutor powered by Google Gemini, designed specifically for beginners.
 Your pedagogical mission:
-1. Explain concepts simply and intuitively using relatable real-world analogies (e.g., variables are labeled boxes, loops are repeating musical tracks, classes are cookie cutters and objects are cookies).
+1. Explain concepts simply and intuitively using relatable real-world analogies (e.g., variables are labeled boxes, loops are repeating musical tracks, classes are blueprints and objects are houses).
 2. Never dump dry theory without showing a clear, runnable code example.
 3. Keep code snippets beginner-friendly, clean, well-formatted, and contained in a single class with a main method when runnable.
 4. When explaining compiler or runtime errors, breakdown:
@@ -310,7 +313,7 @@ Your pedagogical mission:
 6. Provide short check-for-understanding questions or mini-challenges to reinforce learning.
 7. Use Markdown formatting with bolding, bullet points, and syntax-highlighted java code blocks (\`\`\`java).`;
 
-  // If API key is provided and looks plausible (length >= 25)
+  // If API key is configured in .env
   if (effectiveApiKey && effectiveApiKey.length >= 25) {
     try {
       // Clean and normalize messages for Gemini API
@@ -341,7 +344,7 @@ Your pedagogical mission:
         const lastUser = messages.filter(m => m.role === 'user').pop();
         normalizedContents.push({
           role: 'user',
-          parts: [{ text: lastUser?.content || 'Hello DukeAI! Help me learn Java.' }]
+          parts: [{ text: lastUser?.content || 'Hello! Help me learn Java.' }]
         });
       }
 
@@ -361,26 +364,26 @@ Your pedagogical mission:
         isOfflineFallback: false
       });
     } catch (apiErr) {
-      console.warn('Gemini API call failed, using pedagogical engine:', apiErr.message);
+      console.warn('Gemini API call failed:', apiErr.message);
       const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content || '';
       const fallbackReply = generatePedagogicalFallback(lastUserMsg, codeContext);
       return res.json({
-        reply: fallbackReply,
-        model: 'duke-pedagogical-v2',
+        reply: `${fallbackReply}\n\n---\n> ⚠️ **Gemini API (${apiErr.message.includes('403') ? 'Access Denied / Invalid Project' : 'Notice'})**: ${apiErr.message}\n> *Check your \`GEMINI_API_KEY\` in \`.env\` or create a key at [Google AI Studio](https://aistudio.google.com/app/apikey).*`,
+        model: 'gemini-tutor-local',
         provider: 'offline-fallback',
         isOfflineFallback: true
       });
     }
   }
 
-  // Fallback: Smart Built-in Pedagogical Tutor Engine (Offline / Zero-Config)
+  // Fallback if no GEMINI_API_KEY is configured in .env
   const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content || '';
   const fallbackReply = generatePedagogicalFallback(lastUserMsg, codeContext);
 
   return res.json({
-    reply: fallbackReply,
-    model: 'duke-pedagogical-v2',
-    provider: 'offline',
+    reply: `${fallbackReply}\n\n---\n> 💡 **Gemini Key Notice**: Set \`GEMINI_API_KEY=your_key\` in your \`.env\` file to connect to live Google Gemini AI.`,
+    model: 'gemini-tutor-local',
+    provider: 'local-engine',
     isOfflineFallback: true
   });
 });
@@ -400,7 +403,7 @@ function generatePedagogicalFallback(prompt, codeContext = '') {
       specificCause = `\n- **Cause**: The \`public class\` name must match the filename. Ensure your class is named \`public class Main\`.`;
     }
 
-    return `### 🔍 DukeAI Error Diagnosis & Fix
+    return `### 🔍 Java Error Diagnosis & Fix
 ${specificCause}
 
 Here is a step-by-step checklist to resolve this:
@@ -474,7 +477,7 @@ In Java, every variable has a **Type** (what fits inside) and a **Name** (the la
 2. \`double\`: Fractional / decimal numbers (\`double price = 19.99;\`)
 3. \`boolean\`: Logical truth value: either \`true\` or \`false\`
 4. \`char\`: A single character inside single quotes (\`char letter = 'A';\`)
-5. \`String\`: Text inside double quotes (\`String name = "Duke";\`)
+5. \`String\`: Text inside double quotes (\`String name = "Java";\`)
 
 \`\`\`java
 public class Main {
@@ -586,7 +589,7 @@ public class Main {
 }
 \`\`\`
 
-> 💡 **Tip for our Studio**: When testing \`Scanner\` code in DukeAI Studio, open the **Stdin** drawer in the terminal bar below and enter your inputs line by line!`;
+> 💡 **Tip for our Studio**: When testing \`Scanner\` code, open the **Stdin** drawer in the terminal bar below and enter your inputs line by line!`;
   }
 
   // 7. Methods and Functions
@@ -725,7 +728,7 @@ public class Main {
     }
 
     public static void main(String[] args) {
-        System.out.println("=== DukeAI Java Calculator ===");
+        System.out.println("=== Java Calculator ===");
         calculate(15, 5, '+');
         calculate(20, 4, '-');
         calculate(7, 8, '*');
@@ -918,7 +921,7 @@ public class Main {
     }
 
     public static void main(String[] args) {
-        String original = "Hello DukeAI";
+        String original = "Hello World";
         System.out.println("Original: " + original);
         System.out.println("Reversed: " + reverseString(original));
     }

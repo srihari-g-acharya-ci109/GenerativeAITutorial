@@ -18,7 +18,6 @@ class JavaStudioApp {
     await this.initMonacoEditor();
     this.initControllers();
     this.initLessonSystem();
-    this.initSettingsModal();
     this.initCodeActions();
     this.initSplitResizers();
   }
@@ -33,7 +32,7 @@ class JavaStudioApp {
 
       window.require(['vs/editor/editor.main'], () => {
         // Define Custom Dark Theme
-        monaco.editor.defineTheme('duke-dark-theme', {
+        monaco.editor.defineTheme('gemini-dark-theme', {
           base: 'vs-dark',
           inherit: true,
           rules: [
@@ -66,7 +65,7 @@ class JavaStudioApp {
         this.editor = monaco.editor.create(container, {
           value: this.currentLesson.starterCode,
           language: 'java',
-          theme: 'duke-dark-theme',
+          theme: 'gemini-dark-theme',
           automaticLayout: true,
           fontSize: 14,
           fontFamily: "'JetBrains Mono', monospace",
@@ -161,7 +160,7 @@ class JavaStudioApp {
       stdinInput.value = '';
     }
 
-    // Inform DukeAI about lesson selection
+    // Inform Gemini Tutor about lesson selection
     this.tutor.addAssistantMessage(`### 📖 Switched to: **${lesson.title}**
 
 ${lesson.explanation.trim()}
@@ -199,49 +198,6 @@ I've loaded the starter code into your editor. Press **Run Code (Ctrl+Enter)** t
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-    });
-  }
-
-  initSettingsModal() {
-    const modal = document.getElementById('settingsModalBackdrop');
-    const openBtn = document.getElementById('openSettingsBtn');
-    const closeBtn = document.getElementById('closeSettingsModalBtn');
-    const cancelBtn = document.getElementById('cancelSettingsBtn');
-    const saveBtn = document.getElementById('saveSettingsBtn');
-    const apiKeyInput = document.getElementById('geminiApiKeyInput');
-    const modelSelect = document.getElementById('modelSelect');
-
-    const toggleModal = (open) => {
-      if (open) {
-        apiKeyInput.value = localStorage.getItem('duke_ai_gemini_api_key') || '';
-        modelSelect.value = localStorage.getItem('duke_ai_model') || 'gemini-2.5-flash';
-        modal.classList.add('open');
-      } else {
-        modal.classList.remove('open');
-      }
-    };
-
-    openBtn.addEventListener('click', () => toggleModal(true));
-    closeBtn.addEventListener('click', () => toggleModal(false));
-    cancelBtn.addEventListener('click', () => toggleModal(false));
-
-    modal.addEventListener('click', (e) => {
-      if (e.target === modal) toggleModal(false);
-    });
-
-    saveBtn.addEventListener('click', () => {
-      const key = apiKeyInput.value.trim();
-      const model = modelSelect.value;
-
-      if (key) {
-        localStorage.setItem('duke_ai_gemini_api_key', key);
-      } else {
-        localStorage.removeItem('duke_ai_gemini_api_key');
-      }
-      localStorage.setItem('duke_ai_model', model);
-
-      toggleModal(false);
-      this.tutor.addAssistantMessage(`✅ **Settings saved!** Using model **${model}** ${key ? 'with your Google Gemini API key' : 'in offline pedagogical mode'}.`);
     });
   }
 
