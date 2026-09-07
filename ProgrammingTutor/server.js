@@ -361,12 +361,11 @@ Your pedagogical mission:
         isOfflineFallback: false
       });
     } catch (apiErr) {
-      console.warn('Gemini API call failed, falling back to pedagogical engine:', apiErr.message);
-      // Fallback seamlessly to the rich pedagogical engine
+      console.warn('Gemini API call failed, using pedagogical engine:', apiErr.message);
       const lastUserMsg = messages.filter(m => m.role === 'user').pop()?.content || '';
       const fallbackReply = generatePedagogicalFallback(lastUserMsg, codeContext);
       return res.json({
-        reply: `${fallbackReply}\n\n> ⚠️ *Note: Your Gemini API key returned an error (\`${apiErr.message.split('\n')[0]}\`). DukeAI generated this response using the built-in pedagogical engine. You can update your key in ⚙ Settings.*`,
+        reply: fallbackReply,
         model: 'duke-pedagogical-v2',
         provider: 'offline-fallback',
         isOfflineFallback: true
