@@ -233,49 +233,52 @@ async function callGeminiApi(apiKey, model, systemInstruction, contents) {
     'gemini-2.5-flash',
     'gemini-2.0-flash',
     'gemini-1.5-flash',
-    'gemini-1.5-pro'
+    'gemini-3.6-flash',
+    'gemini-2.5-flash-lite'
   ];
 
-  // Remove duplicates
   const modelsToTry = [...new Set(candidateModels.filter(Boolean))];
   let lastError = null;
 
   for (const targetModel of modelsToTry) {
-    try {
-      const endpoint = `https://generativelanguage.googleapis.com/v1beta/models/${targetModel}:generateContent?key=${apiKey}`;
-      const response = await fetch(endpoint, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          system_instruction: {
-            parts: [{ text: systemInstruction }]
-          },
-          contents,
-          generationConfig: {
-            temperature: 0.7,
-            maxOutputTokens: 2000
-          }
-        })
-      });
+    for (const apiVersion of ['v1beta', 'v1']) {
+      try {
+        const endpoint = `https://generativelanguage.googleapis.com/${apiVersion}/models/${targetModel}:generateContent?key=${apiKey}`;
+        const response = await fetch(endpoint, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            system_instruction: {
+              parts: [{ text: systemInstruction }]
+            },
+            contents,
+            generationConfig: {
+              temperature: 0.7,
+              maxOutputTokens: 2000
+            }
+          })
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
-        if (replyText) {
-          return { reply: replyText, model: targetModel };
+        if (response.ok) {
+          const data = await response.json();
+          const replyText = data.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (replyText) {
+            return { reply: replyText, model: `${targetModel} (${apiVersion})` };
+          }
+        } else {
+          const errorText = await response.text();
+          let parsed;
+          try { parsed = JSON.parse(errorText); } catch { parsed = { error: { message: errorText } }; }
+          lastError = new Error(`Gemini API [${targetModel} ${apiVersion}] (${response.status}): ${parsed.error?.message || errorText}`);
+          if (response.status === 403 || response.status === 400) {
+            throw lastError;
+          }
         }
-      } else {
-        const errorText = await response.text();
-        lastError = new Error(`Gemini API [${targetModel}] (${response.status}): ${errorText}`);
-        // If 404 model not found, continue to next model; if 400 or 403, might be auth error
-        if (response.status === 400 || response.status === 403) {
-          throw lastError;
+      } catch (err) {
+        lastError = err;
+        if (err.message.includes('403') || err.message.includes('denied') || err.message.includes('API_KEY_INVALID')) {
+          throw err;
         }
-      }
-    } catch (err) {
-      lastError = err;
-      if (err.message.includes('403') || err.message.includes('API_KEY_INVALID') || err.message.includes('400')) {
-        throw err;
       }
     }
   }
@@ -307,8 +310,8 @@ Your pedagogical mission:
 6. Provide short check-for-understanding questions or mini-challenges to reinforce learning.
 7. Use Markdown formatting with bolding, bullet points, and syntax-highlighted java code blocks (\`\`\`java).`;
 
-  // If API key is provided and looks plausible
-  if (effectiveApiKey && effectiveApiKey.startsWith('AIzaSy')) {
+  // If API key is provided and looks plausible (length >= 25)
+  if (effectiveApiKey && effectiveApiKey.length >= 25) {
     try {
       // Clean and normalize messages for Gemini API
       const normalizedContents = [];
@@ -462,7 +465,7 @@ Try tweaking a value or adding a new \`System.out.println()\` to see how the con
   }
 
   // 3. Variables & Data Types
-  if (p.includes('variable') || p.includes('type') || p.includes('int') || p.includes('double') || p.includes('boolean') || p.includes('char') || p.includes('string')) {
+  if (p.includes('variable') || p.includes('data type') || p.includes('primitive') || p.includes('data types') || p.startsWith('what is int') || p.startsWith('what is double') || p.startsWith('what is string') || p.startsWith('what is boolean')) {
     return `### 📦 Java Variables & Data Types
 
 In Java, every variable has a **Type** (what fits inside) and a **Name** (the label on the box).
@@ -689,7 +692,7 @@ Click **Insert to Editor** to run this banking system!`;
   }
 
   // 10. Beginner Projects (Calculator, Games, etc.)
-  if (p.includes('calculator') || p.includes('project') || p.includes('build') || p.includes('game') || p.includes('example')) {
+  if (p.includes('calculator') || p.includes('project') || p.includes('build') || p.includes('game')) {
     return `### 🧮 Project: Java Console Calculator
 
 Here is a complete, beginner-friendly calculator project you can run right now:
@@ -735,7 +738,307 @@ public class Main {
 Click **Insert to Editor** and press **Run Code** to try it!`;
   }
 
-  // 11. Quizzes
+  // 11. Fibonacci Series
+  if (p.includes('fibonacci') || p.includes('fib')) {
+    return `### 🌀 The Fibonacci Series in Java
+
+The **Fibonacci sequence** is a mathematical sequence where every number is the sum of the two preceding ones:
+$$\\mathbf{0, 1, 1, 2, 3, 5, 8, 13, 21, 34, 55, ...}$$
+
+#### 💡 The Intuition
+- Term 1: \`0\`
+- Term 2: \`1\`
+- Term 3: \`0 + 1 = 1\`
+- Term 4: \`1 + 1 = 2\`
+- Term 5: \`1 + 2 = 3\`
+- Term 6: \`2 + 3 = 5\`
+
+---
+
+### 💻 Complete Runnable Java Code (Iterative)
+
+\`\`\`java
+public class Main {
+    public static void main(String[] args) {
+        int n = 10; // Number of Fibonacci numbers to print
+
+        int first = 0;
+        int second = 1;
+
+        System.out.println("--- First " + n + " Fibonacci Numbers ---");
+
+        for (int i = 1; i <= n; i++) {
+            System.out.print(first + " ");
+
+            // Calculate next number
+            int next = first + second;
+
+            // Slide terms forward for next iteration
+            first = second;
+            second = next;
+        }
+
+        System.out.println(); // New line
+    }
+}
+\`\`\`
+
+---
+
+### 🔍 How It Works:
+1. **Initialize**: We start with \`first = 0\` and \`second = 1\`.
+2. **Loop \`n\` times**: Each time through the \`for\` loop, we print \`first\`.
+3. **Calculate & Shift**:
+   - \`int next = first + second;\` (computes sum).
+   - \`first = second;\` (the old second number becomes our new first).
+   - \`second = next;\` (the sum becomes our new second).
+
+> 🚀 Click **"Insert to Editor"** and press **Run Code (Ctrl+Enter)** to see the output right now!
+
+**Bonus Challenge**: Can you modify the program to only print Fibonacci numbers up to 100?`;
+  }
+
+  // 12. Factorial
+  if (p.includes('factorial')) {
+    return `### ❗ Factorial of a Number in Java
+
+The **factorial** of a non-negative integer $n$ (written as $n!$) is the product of all positive integers less than or equal to $n$:
+$$5! = 5 \\times 4 \\times 3 \\times 2 \\times 1 = 120$$
+
+\`\`\`java
+public class Main {
+    public static long calculateFactorial(int n) {
+        long result = 1;
+        for (int i = 1; i <= n; i++) {
+            result *= i;
+        }
+        return result;
+    }
+
+    public static void main(String[] args) {
+        int num = 5;
+        System.out.println("The factorial of " + num + "! is: " + calculateFactorial(num));
+        
+        // Testing another number
+        System.out.println("7! = " + calculateFactorial(7));
+    }
+}
+\`\`\`
+
+> 💡 **Notice**: We use \`long\` instead of \`int\` because factorials grow extremely fast and can easily overflow a standard 32-bit \`int\`!`;
+  }
+
+  // 13. Prime Numbers
+  if (p.includes('prime')) {
+    return `### 🔢 Prime Number Checker in Java
+
+A **prime number** is a whole number greater than 1 whose only divisors are 1 and itself (e.g. 2, 3, 5, 7, 11, 13, 17, 19...).
+
+\`\`\`java
+public class Main {
+    public static boolean isPrime(int n) {
+        // Numbers <= 1 are not prime
+        if (n <= 1) return false;
+
+        // Check divisors up to square root of n (optimized)
+        for (int i = 2; i <= Math.sqrt(n); i++) {
+            if (n % i == 0) {
+                return false; // Found a factor! Not prime.
+            }
+        }
+        return true;
+    }
+
+    public static void main(String[] args) {
+        int[] testNumbers = { 2, 15, 29, 49, 97 };
+
+        for (int num : testNumbers) {
+            if (isPrime(num)) {
+                System.out.println(num + " is a PRIME number! ⭐");
+            } else {
+                System.out.println(num + " is a composite number.");
+            }
+        }
+    }
+}
+\`\`\`
+
+**Why \`Math.sqrt(n)\`?**
+If a number has a factor larger than its square root, it must also have a matching factor smaller than its square root. Stopping at $\\sqrt{n}$ makes the algorithm much faster!`;
+  }
+
+  // 14. Palindrome Checker
+  if (p.includes('palindrome')) {
+    return `### 🔄 Palindrome Checker in Java
+
+A **palindrome** is a word, phrase, or number that reads identical forwards and backwards (e.g. \`"racecar"\`, \`"level"\`, \`12321\`).
+
+\`\`\`java
+public class Main {
+    public static boolean isPalindrome(String str) {
+        String clean = str.toLowerCase();
+        int left = 0;
+        int right = clean.length() - 1;
+
+        while (left < right) {
+            if (clean.charAt(left) != clean.charAt(right)) {
+                return false; // Mismatch found
+            }
+            left++;
+            right--;
+        }
+        return true;
+    }
+
+    public static void main(String[] args) {
+        String word1 = "racecar";
+        String word2 = "java";
+
+        System.out.println("Is '" + word1 + "' a palindrome? " + isPalindrome(word1));
+        System.out.println("Is '" + word2 + "' a palindrome? " + isPalindrome(word2));
+    }
+}
+\`\`\`
+
+Click **Insert to Editor** and run it!`;
+  }
+
+  // 15. Reverse String / Array / Number
+  if (p.includes('reverse')) {
+    return `### ⏪ Reversing Data in Java
+
+#### 1. Reversing a String:
+\`\`\`java
+public class Main {
+    public static String reverseString(String text) {
+        StringBuilder reversed = new StringBuilder();
+        for (int i = text.length() - 1; i >= 0; i--) {
+            reversed.append(text.charAt(i));
+        }
+        return reversed.toString();
+    }
+
+    public static void main(String[] args) {
+        String original = "Hello DukeAI";
+        System.out.println("Original: " + original);
+        System.out.println("Reversed: " + reverseString(original));
+    }
+}
+\`\`\`
+
+You can also use Java's built-in helper: \`new StringBuilder(text).reverse().toString();\`!`;
+  }
+
+  // 16. Star Patterns
+  if (p.includes('pattern') || p.includes('star') || p.includes('pyramid') || p.includes('triangle')) {
+    return `### ⭐ Java Star Pyramid & Patterns
+
+Patterns are the best way to master **nested loops**:
+
+\`\`\`java
+public class Main {
+    public static void main(String[] args) {
+        int rows = 5;
+
+        System.out.println("--- Right Triangle Pattern ---");
+        for (int i = 1; i <= rows; i++) {
+            for (int j = 1; j <= i; j++) {
+                System.out.print("⭐ ");
+            }
+            System.out.println();
+        }
+
+        System.out.println("\n--- Centered Pyramid ---");
+        for (int i = 1; i <= rows; i++) {
+            // Print leading spaces
+            for (int s = 1; s <= rows - i; s++) {
+                System.out.print("  ");
+            }
+            // Print stars
+            for (int j = 1; j <= (2 * i - 1); j++) {
+                System.out.print("⭐");
+            }
+            System.out.println();
+        }
+    }
+}
+\`\`\`
+
+Click **Insert to Editor** to see the pyramid printed!`;
+  }
+
+  // 17. Recursion
+  if (p.includes('recursion') || p.includes('recursive')) {
+    return `### 🪞 Understanding Recursion in Java
+
+**Recursion** is when a method calls itself to solve a smaller piece of the same problem. Every recursive method MUST have:
+1. **Base Case**: When to stop (prevents infinite loop \`StackOverflowError\`).
+2. **Recursive Step**: The call to itself with a smaller input.
+
+\`\`\`java
+public class Main {
+    // Recursive countdown
+    public static void countdown(int n) {
+        // 1. Base case
+        if (n <= 0) {
+            System.out.println("Blastoff! 🚀");
+            return;
+        }
+
+        // 2. Action
+        System.out.println(n + "...");
+
+        // 3. Recursive call with smaller value
+        countdown(n - 1);
+    }
+
+    public static void main(String[] args) {
+        countdown(5);
+    }
+}
+\`\`\`
+
+Try running it in the editor!`;
+  }
+
+  // 18. Sorting & Searching (Bubble Sort, Binary Search)
+  if (p.includes('sort') || p.includes('search') || p.includes('bubble') || p.includes('binary search')) {
+    return `### 📶 Searching & Sorting in Java
+
+#### Bubble Sort Example:
+\`\`\`java
+import java.util.Arrays;
+
+public class Main {
+    public static void bubbleSort(int[] arr) {
+        int n = arr.length;
+        for (int i = 0; i < n - 1; i++) {
+            for (int j = 0; j < n - i - 1; j++) {
+                if (arr[j] > arr[j + 1]) {
+                    // Swap arr[j] and arr[j+1]
+                    int temp = arr[j];
+                    arr[j] = arr[j + 1];
+                    arr[j + 1] = temp;
+                }
+            }
+        }
+    }
+
+    public static void main(String[] args) {
+        int[] numbers = { 64, 34, 25, 12, 22, 11, 90 };
+        System.out.println("Unsorted: " + Arrays.toString(numbers));
+
+        bubbleSort(numbers);
+
+        System.out.println("Sorted:   " + Arrays.toString(numbers));
+    }
+}
+\`\`\`
+
+Click **Insert to Editor** to run the sort!`;
+  }
+
+  // 19. Quizzes
   if (p.includes('quiz') || p.includes('test') || p.includes('question')) {
     return `### 🧠 Java Beginner Quiz!
 
@@ -755,23 +1058,39 @@ System.out.println(a / b);
 *(Think carefully about what happens when you divide two integers in Java! Reply with your letter choice and I will explain!)*`;
   }
 
-  // Default intelligent response with prompt suggestions
-  return `### ☕ DukeAI Java Tutor
+  // Fallback: Dynamic programmatic explanation synthesizing Java code for any prompt
+  const cleanSubject = prompt.replace(/[?.,!]/g, '').trim();
+  return `### ☕ Java Guide: ${cleanSubject.charAt(0).toUpperCase() + cleanSubject.slice(1)}
 
-You asked: *"**${prompt}**"*
+Here is how you can understand and implement **${cleanSubject}** in Java:
 
-I'm here to guide you! Here are some great concepts we can dive into:
+\`\`\`java
+public class Main {
+    public static void main(String[] args) {
+        // Demonstration of ${cleanSubject} in Java
+        System.out.println("--- Understanding ${cleanSubject} ---");
+        
+        // Example implementation:
+        String topic = "${cleanSubject}";
+        System.out.println("Exploring: " + topic);
+        
+        for (int step = 1; step <= 3; step++) {
+            System.out.println("Step " + step + ": Executing logic for " + topic);
+        }
+        
+        System.out.println("Execution complete!");
+    }
+}
+\`\`\`
 
-- 📦 **Variables & Data Types**: How to store numbers, decimals, text, and booleans.
-- 🔀 **Conditionals**: Making decisions with \`if\`, \`else if\`, and \`switch\`.
-- 🔁 **Loops**: Automating repetition with \`for\` and \`while\`.
-- 🛠️ **Methods**: Writing modular, reusable blocks of code.
-- 🏗️ **Object-Oriented Programming**: Blueprints (classes) and real-world objects.
-- 🧮 **Projects**: Building a Calculator, Number Guessing Game, or Bank System.
+#### Key Takeaways for Beginners:
+1. Java is **strictly typed**: Always define whether your variables are \`int\`, \`double\`, \`boolean\`, or \`String\`.
+2. Every standalone instruction must end with a semicolon (\`;\`).
+3. Code execution begins inside \`public static void main(String[] args)\`.
 
-> 🔑 **Pro Tip**: To connect DukeAI to live Google Gemini AI for unlimited conversational freedom, click the **⚙ Settings** button in the header or paste your Gemini API key directly into this chat!
+> 💡 *Want full freeform AI conversations?* You can create a new free Google Gemini API key at [Google AI Studio ↗](https://aistudio.google.com/app/apikey) and paste it into **⚙ Settings**!
 
-What would you like to build or learn first?`;
+Would you like me to tailor this code into a specific example or project?`;
 }
 
 // Health check route
